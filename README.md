@@ -13,7 +13,8 @@ Advanced Python implementation for ECG signal processing, feature extraction, an
 5. [Features](#features)
 6. [Algorithm](#algorithm)
 7. [Results](#results)
-8. [Contact](#contact)
+8. [Important Notes](#important-notes)
+9. [Contact](#contact)
 
 ## Introduction
 
@@ -49,7 +50,7 @@ To use this code, follow these steps:
 2. Clone or download this repository to your local machine
 3. Run the Python script:
 
-python ecg_analysis.py
+python animation_real_time_with_SNR.py
 
 This script will generate an animated plot showing the ECG signal analysis in real-time.
 
@@ -140,12 +141,43 @@ The real-time visualization provides:
 
 The animated plot provides real-time insights into ECG signal analysis. You can observe changes in heart rate statistics, SNR degradation patterns, heart rate variability trends, and the model's classification probability as the simulation progresses through different noise conditions.
 
+## Important Notes
+
+### Pre-trained Model Requirements
+**CRITICAL**: This implementation requires a pre-trained TensorFlow model that is **NOT included** in this repository. The model is loaded from `./model/` directory and is essential for the machine learning classification functionality.
+
+**Model Details:**
+- The model is trained specifically for ECG signal classification
+- All predictions and classification results shown in the animation are based on this pre-trained model
+- The model expects 4 input features: HR mean, HR max, HR min, and HRV (RMSSD)
+- Model outputs probability values between 0 and 1 for binary classification
+
+**Model Access:**
+- The pre-trained model is **proprietary** and not publicly available
+- To obtain access to the model file, you **MUST contact the author** directly
+- Without the model, the script will fail to run and generate errors
+- The model cannot be redistributed without explicit permission
+
+**Contacting for Model Access:**
+Please reach out to **murat.kucukosmanoglu@dprime.ai** with:
+- Your intended use case for the model
+- Research or educational purpose description
+- Institutional affiliation (if applicable)
+
+**Alternative Usage:**
+If you want to use this code framework with your own model:
+1. Train your own TensorFlow model with similar input/output structure
+2. Save it in TensorFlow SavedModel format
+3. Place it in the `./model/` directory
+4. Ensure your model accepts 4 features and outputs single probability value
+
 ## Contact
 
 **Project Maintainer**: Murat Küçükosmanoğlu
 **Email**: murat.kucukosmanoglu@dprime.ai
 
 For any questions or inquiries, feel free to reach out for:
+- **Model access requests** (Required for running the code)
 - Technical assistance with implementation
 - Questions about the algorithm details
 - Collaboration opportunities
