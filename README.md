@@ -173,7 +173,7 @@ If you want to use this code framework with your own model:
 
 ## Contact
 
-**Project Maintainer**: Murat Küçükosmanoğlu
+**Project Maintainer**: Murat Kucukosmanoglu
 **Email**: murat.kucukosmanoglu@dprime.ai
 
 For any questions or inquiries, feel free to reach out for:
@@ -188,3 +188,4 @@ Please do not hesitate to contact me if you have any feedback or need assistance
 ---
 
 *This project demonstrates advanced ECG signal processing techniques suitable for research, development, and educational purposes in cardiac signal analysis.*
+
