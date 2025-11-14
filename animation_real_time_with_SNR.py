@@ -2,57 +2,19 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from matplotlib.animation import PillowWriter
 from scipy.signal import butter, filtfilt
 from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
-from tensorflow import keras
 import neurokit2 as nk
 from scipy import stats
-from matplotlib.animation import FuncAnimation, FFMpegWriter
-import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-from scipy.spatial.distance import cdist
-from matplotlib.patches import Ellipse
-from sklearn.mixture import GaussianMixture
-from sklearn.cluster import KMeans
 
-# initialize StandardScaler
+# Load model
+model_path = "./model/"
+model = tf.saved_model.load(model_path)
 scaler = StandardScaler()
 
-# load saved TensorFlow model
-model_path = "/Users/muratkucukosmanoglu/Desktop/ECG-WORKS-2023/HID/model"
-model = tf.saved_model.load(model_path)
-
-# example input data with one sample
-#input_data = np.array([0.5, 0.5, 0.5, -2])
-
-# reshape input data to match expected shape
-#input_data = input_data.reshape(1, -1)
-
-# make prediction with the model
-#predictions = model(input_data)
-#print(predictions)
-
 def get_ecg_features(ecg, time_in_sec, fs):
-    """
-    Compute ECG features from raw ECG signal, including kSQI.
-
-    Parameters
-    ----------
-    ecg : array-like
-        Raw ECG signal.
-    time_in_sec : array-like
-        Timestamps corresponding to each sample of the ECG signal.
-    fs : float
-        Sampling frequency of the ECG signal.
-
-    Returns
-    -------
-    array
-        Array of ECG features: [mean heart rate, maximum heart rate, minimum heart rate, heart rate variability, kSQI].
-    """
+    """Extract ECG features including HR statistics and SNR"""
     try:
         b, a = butter(4, (0.25, 25), 'bandpass', fs=fs)
         ecg_filt = filtfilt(b, a, ecg, axis=0)
@@ -65,7 +27,7 @@ def get_ecg_features(ecg, time_in_sec, fs):
     if len(rr_times) == 0:
         raise ValueError("No R-peaks detected in ECG signal.")
     
-    # Calculate mean heart rate, maximum heart rate, minimum heart rate, and heart rate variability (similar to your previous code)
+    # Calculate heart rate statistics
     d_rr = np.diff(rr_times)
     heart_rate = 60 / d_rr
     if heart_rate.size == 0:
@@ -73,30 +35,29 @@ def get_ecg_features(ecg, time_in_sec, fs):
     
     valid_heart_rate = heart_rate[~np.isnan(heart_rate)]
     z_scores = np.abs(stats.zscore(valid_heart_rate))
-
     z_score_threshold = 2.0
     heart_rate = valid_heart_rate[z_scores <= z_score_threshold]
 
     hr_mean = np.nanmean(heart_rate)
     hr_min = np.nanmin(heart_rate)
     hr_max = np.nanmax(heart_rate)
+    
+    # Calculate HRV
     d_rr_ms = 1000 * d_rr
     d_d_rr_ms = np.diff(d_rr_ms)
-
     valid_d_d_rr_ms = d_d_rr_ms[~np.isnan(d_d_rr_ms)] 
     z_scores = np.abs(stats.zscore(valid_d_d_rr_ms))
     d_d_rr_ms = valid_d_d_rr_ms[z_scores <= z_score_threshold]
     heart_rate_variability = np.sqrt(np.nanmean(np.square(d_d_rr_ms)))
 
-    # Calculate noise power (mean squared amplitude of noise)
+    # Calculate SNR
     ecg_with_rr_intervals = []
     ecg_with_rr_intervals_cleaned = []
 
     for rr_interval in rr_times:
-        start_time = rr_interval - 0.05  # 0.05 seconds before the RR interval
-        end_time = rr_interval + 0.05    # 0.05 seconds after the RR interval
+        start_time = rr_interval - 0.05
+        end_time = rr_interval + 0.05
         indices = np.where((time_in_sec >= start_time) & (time_in_sec <= end_time))[0]
-
         indices = indices[(indices >= 0) & (indices < len(ecg))]
 
         if len(indices) > 0:
@@ -108,276 +69,387 @@ def get_ecg_features(ecg, time_in_sec, fs):
 
     signal_power = np.var(ecg_with_rr_intervals)
     noise_power = np.var(ecg_with_rr_intervals - ecg_with_rr_intervals_cleaned)
-
     snr_values = 10 * np.log10(signal_power / noise_power)
-
-    # Compute kSQI
-    #ecg_kurtosis = kurtosis(ecg_cleaned)
-    #scaling_factor = 1.0  # Adjust as needed
-    #kSQI = scaling_factor * (1 / (1 + np.exp(-ecg_kurtosis)))
 
     return np.array([hr_mean, hr_max, hr_min, heart_rate_variability, snr_values])
 
-
-ecg_signal = []
-t = []
-t2 = []
-t3 = []
-hr_mean = []
-snr_values = []
-hr_max = []
-hr_min = []
-heart_rate_variability = []
-t11= [] 
-hr_features = []
-predictions = []
-frame_count = 0  # Initialize frame count
-
-
-# Define animation function
-def animate(i):
-    global ecg_signal, t, hr_mean, hr_max, hr_min, heart_rate_variability, snr_values, t2, t3, predictions, frame_count
-
-    # Check if 200 frames have been processed
-    if frame_count >= 1650:
-        return
-    
-    # Set sampling rate and duration
-    fs = 250
-    duration = 15  # seconds
-    t += list(np.arange(i, i+duration, 1/fs))
-    #t11 = np.arange(i, i+10000, 1/fs)
-
-    # Compute ECG features
-    window_shift = 1
-    window_size = 30
-    
-    #ecg_signal += list(nk.ecg_simulate(duration, sampling_rate=fs, heart_rate=70, noise=2)) # Real Time DATA
-    ecg_signal = nk.ecg_simulate(duration, sampling_rate=fs, heart_rate=70)
-
-    # Define noise levels for each set of 75 frames
-    if frame_count < 200:
-        noise_std = 0.01
+def get_noise_std(frame_count):
+    """Progressive noise schedule for simulation"""
+    if frame_count < 20:
+        return 0.01
+    elif frame_count < 50:
+        return 0.05
+    elif frame_count < 75:
+        return 0.15
+    elif frame_count < 100:
+        return 0.30
+    elif frame_count < 125:
+        return 0.45
+    elif frame_count < 150:
+        return 0.60
+    elif frame_count < 175:
+        return 0.80
+    elif frame_count < 200:
+        return 1.00
     elif frame_count < 450:
-        noise_std = 0.05
+        return 1.25
+    elif frame_count < 500:
+        return 1.50
     elif frame_count < 550:
-        noise_std = 0.10
+        return 1.75
+    elif frame_count < 600:
+        return 2.00
     elif frame_count < 650:
-        noise_std = 0.175
+        return 1.80
+    elif frame_count < 700:
+        return 1.60
+    elif frame_count < 750:
+        return 1.40
+    elif frame_count < 800:
+        return 1.20
     elif frame_count < 850:
-        noise_std = 0.18
-    elif frame_count < 1150:
-        noise_std = 0.2
-    elif frame_count < 1250:
-        noise_std = 0.3
-    elif frame_count < 1350:
-        noise_std = 0.5
-    elif frame_count < 1450:
-        noise_std = 0.75
-    elif frame_count < 1550:
-        noise_std = 1
-    else:
-        noise_std = 0.85
+        return 1.00
 
-    # Generate noise with the specified standard deviation
-    higher_freq_noise = np.random.normal(0, noise_std, len(ecg_signal))
-
-    # Add the higher-frequency noise to the ECG signal
-    ecg_signal= ecg_signal + higher_freq_noise
-
-    # Get start and end index for current animation frame
-    start_idx = int(i*window_shift*fs)
-    end_idx = start_idx + window_size*fs
-    print(start_idx)
-    print(end_idx )
-    #axs[0].clear()
-    axs[0].plot(t[-window_shift*fs:], ecg_signal[-window_shift*fs:], color='black')
-    #axs[0].plot(t11[-duration*window_size*fs:], ecg_signal[-duration*window_size*fs:], color='black')
-    axs[0].set_title('ECG Signal')
-    axs[0].set_xlabel('Time (s)')
-    axs[0].set_ylabel('Amplitude (mV)')
-
-
-    if t[-1]>=30:
-
-        hr_mean += [get_ecg_features(ecg_signal[-1*window_size*fs:], np.arange(start_idx, end_idx)/fs,fs=fs)[0]]
-        hr_max += [get_ecg_features(ecg_signal[-1*window_size*fs:], np.arange(start_idx, end_idx)/fs,fs=fs)[1]]
-        hr_min += [get_ecg_features(ecg_signal[-1*window_size*fs:], np.arange(start_idx, end_idx)/fs,fs=fs)[2]]
-        heart_rate_variability += [get_ecg_features(ecg_signal[-1*window_size*fs:], np.arange(start_idx, end_idx)/fs,fs=fs)[3]]
-        snr_values += [get_ecg_features(ecg_signal[-1*window_size*fs:], np.arange(start_idx, end_idx)/fs,fs=fs)[4]]
-        #kurtosis_values += [get_ecg_features(ecg_signal[-1*window_size*fs:], np.arange(start_idx, end_idx)/fs,fs=fs)[5]]
-
+def generate_ecg_data_and_animate():
+    """Main function to generate ECG data and create animation"""
+    
+    print("Generating cumulative ECG data...")
+    
+    # Parameters
+    fs = 250
+    window_size = 30
+    num_frames = 200
+    plot_tail = 10
+    duration_per_frame = 15
+    
+    # Storage
+    all_data = []
+    frame_count = 0
+    cumulative_ecg_signal = []
+    cumulative_time = []
+    
+    # Generate data frame by frame
+    for i in range(num_frames):
+        print(f"Processing Frame {frame_count}...")
         
-        print(np.arange(start_idx, end_idx)/fs)
-        #hr_min = process_ecg(ecg_signal, window_size, window_shift, fs)[0,1]
-        #hr_max = process_ecg(ecg_signal, window_size, window_shift, fs)[0,2]
-        #hr_variability = process_ecg(ecg_signal,window_size,window_shift,fs)[0,3]
-        t2 += [np.round(np.max(t))]
-        # Plot HR Mean for current frame
-        #axs[1].clear()
-        axs[2].plot(t2, hr_mean, color='blue')
-        axs[2].set_title('HR Mean')
-        axs[2].set_xlabel('Time (s)')
-        axs[2].set_ylabel('HR Mean (BPM)')  
-
-        axs[3].plot(t2, hr_max, color='red')
-        axs[3].set_title('HR Max')
-        axs[3].set_xlabel('Time (s)')
-        axs[3].set_ylabel('HR Max (BPM)')  
-
-        axs[4].plot(t2, hr_min, color='green')
-        axs[4].set_title('HR Min')
-        axs[4].set_xlabel('Time (s)')
-        axs[4].set_ylabel('HR Min (BPM)')  
-
-        axs[5].plot(t2, heart_rate_variability, color='black')
-        axs[5].set_title('HR Variability')
-        axs[5].set_xlabel('Time (s)')
-        axs[5].set_ylabel('HR Variability (BPM)')  
-
-        #axs[6].plot(t2, kurtosis_values, color='black')
-        #axs[6].set_title('Kurtosis kSQI')
-        #axs[6].set_xlabel('Time (s)')
-        #axs[6].set_ylabel('Kurtosis kSQI')  
-
-        # Plot SNR on the 6th subplot (axes 5)
-        axs[1].clear()
-        axs[1].plot(t2, snr_values, color='purple')
-        axs[1].set_title('SNR')
-        axs[1].set_xlabel('Time (s)')
-        axs[1].set_ylabel('SNR (dB)')
+        # Generate ECG segment with realistic heart rate variation
+        base_hr = 70
+        natural_variation = np.random.normal(0, 3)
+        breathing_cycle = 0.15 * i
+        breathing_effect = 3 * np.sin(2 * np.pi * breathing_cycle / 60)
+        time_trend = 8 * np.sin(2 * np.pi * i / (num_frames * 0.6))
+        random_walk = np.random.normal(0, 1) if i > 0 else 0
         
-        # Set y-axis limits for the SNR plot
-        axs[1].set_ylim(0, 15)
-        # Increment frame count
+        current_hr = base_hr + natural_variation + breathing_effect + time_trend + random_walk
+        current_hr = np.clip(current_hr, 55, 95)
+        
+        np.random.seed(i * 42 + 789)
+        ecg_segment = nk.ecg_simulate(duration_per_frame, sampling_rate=fs, heart_rate=current_hr)
+        np.random.seed(None)
+        
+        # Apply progressive noise
+        base_noise_std = get_noise_std(frame_count)
+        noise_variation_factor = np.random.uniform(0.8, 1.2)
+        actual_noise_std = base_noise_std * noise_variation_factor
+        
+        gaussian_noise = np.random.normal(0, actual_noise_std, len(ecg_segment))
+        
+        if actual_noise_std > 0.1:
+            hf_noise_factor = min(0.3, (actual_noise_std - 0.1) * 0.5)
+            hf_noise = hf_noise_factor * np.random.normal(0, 1, len(ecg_segment))
+            b_hf, a_hf = butter(4, 30, 'highpass', fs=fs)
+            hf_noise = filtfilt(b_hf, a_hf, hf_noise)
+        else:
+            hf_noise = 0
+        
+        if actual_noise_std > 0.2:
+            lf_drift_factor = min(0.2, (actual_noise_std - 0.2) * 0.3)
+            lf_drift = lf_drift_factor * np.sin(2 * np.pi * 0.5 * np.arange(len(ecg_segment)) / fs)
+        else:
+            lf_drift = 0
+        
+        total_noise = gaussian_noise + hf_noise + lf_drift
+        ecg_segment_noisy = ecg_segment + total_noise
+        
+        # Update cumulative ECG
+        start_time_global = len(cumulative_ecg_signal) / fs
+        cumulative_ecg_signal.extend(ecg_segment_noisy.tolist())
+        segment_time = np.arange(start_time_global, start_time_global + duration_per_frame, 1/fs)[:len(ecg_segment_noisy)]
+        cumulative_time.extend(segment_time.tolist())
+        
+        # Extract features from sliding window
+        if len(cumulative_ecg_signal) >= window_size * fs:
+            feature_window_size = window_size * fs
+            ecg_for_features = np.array(cumulative_ecg_signal[-feature_window_size:])
+            time_for_features = np.array(cumulative_time[-feature_window_size:])
+            time_for_features = time_for_features - time_for_features[0]
+            
+            try:
+                features = get_ecg_features(ecg_for_features, time_for_features, fs)
+                features_valid = np.all(np.isfinite(features))
+            except Exception as e:
+                features = np.array([np.nan, np.nan, np.nan, np.nan, np.nan])
+                features_valid = False
+        else:
+            features = np.array([np.nan, np.nan, np.nan, np.nan, np.nan])
+            features_valid = False
+        
+        # Prepare animation data
+        plot_window_size = plot_tail * fs
+        if len(cumulative_ecg_signal) >= plot_window_size:
+            ecg_plot = cumulative_ecg_signal[-plot_window_size:]
+            time_plot = cumulative_time[-plot_window_size:]
+            time_plot = [t - time_plot[0] for t in time_plot]
+        else:
+            ecg_plot = cumulative_ecg_signal.copy()
+            time_plot = cumulative_time.copy()
+            if len(time_plot) > 0:
+                time_plot = [t - time_plot[0] for t in time_plot]
+        
+        # Store frame data
+        row_data = {
+            'frame': frame_count,
+            'time_global': len(cumulative_ecg_signal) / fs,
+            'noise_std': actual_noise_std,
+            'base_noise_std': base_noise_std,
+            'current_hr': current_hr,
+            'ecg_plot': ecg_plot,
+            'time_plot': time_plot,
+            'buffer_full': len(cumulative_ecg_signal) >= window_size * fs,
+            'cumulative_duration': len(cumulative_ecg_signal) / fs,
+            'segment_duration': duration_per_frame
+        }
+        
+        if features_valid:
+            row_data.update({
+                'hr_mean': features[0], 'hr_max': features[1], 'hr_min': features[2],
+                'hrv': features[3], 'snr': features[4], 'features_valid': True
+            })
+        else:
+            row_data.update({
+                'hr_mean': np.nan, 'hr_max': np.nan, 'hr_min': np.nan,
+                'hrv': np.nan, 'snr': np.nan, 'features_valid': False
+            })
+
+        all_data.append(row_data)
         frame_count += 1
 
-        if len(hr_mean) >= 30:
-            hr_data = np.array([hr_mean, hr_max, hr_min, heart_rate_variability])
-            # Standardize the heart rate data
-            hr_data_std = scaler.fit_transform(hr_data.T)
-            t3.append(np.round(np.max(t2)))
-            # Get the standardized features for the current time
-            current_features_std = hr_data_std[-1]
-            # Make a prediction using the model
+    df = pd.DataFrame(all_data)
+    
+    # Compute predictions with rolling normalization
+    valid_features = df[df['features_valid'] == True].copy()
+    if len(valid_features) > 0:
+        hr_mean_list = valid_features['hr_mean'].tolist()
+        hr_max_list = valid_features['hr_max'].tolist()
+        hr_min_list = valid_features['hr_min'].tolist()
+        hrv_list = valid_features['hrv'].tolist()
+        
+        predictions = []
+        for i in range(len(hr_mean_list)):
+            current_hr_mean = hr_mean_list[:i+1]
+            current_hr_max = hr_max_list[:i+1]
+            current_hr_min = hr_min_list[:i+1]
+            current_hrv = hrv_list[:i+1]
+            
+            current_data = np.column_stack([current_hr_mean, current_hr_max, current_hr_min, current_hrv])
+            current_scaler = StandardScaler()
+            current_data_std = current_scaler.fit_transform(current_data)
+            current_features_std = current_data_std[-1]
+            
             prediction = model(current_features_std.reshape(1, -1))
-            predictions.append(prediction[0][0])
-            predictions_array = np.array(predictions)
-
-            # Plot Probability and shaded area
-            axs[6].clear()
-            axs[6].plot(t3, predictions_array, color='black')
-            #axs[5].plot(t3, predictions_array, color='black')
-            axs[6].set_title('Probability')
-            axs[6].set_xlabel('Time (s)')
-            axs[6].set_ylabel('Probability')
-            axs[6].axhline(y=0.5, linestyle='--', color='red')
-            axs[6].set_ylim([0, 1])
-            axs[6].fill_between(t3, predictions_array, where=(predictions_array >= 0.5), color='red', alpha=0.3, linewidth=2.5)
-
             
-            #axs[5].fill_between(t3, predictions_array, where=(predictions_array >= 0.5), color='red', alpha=0.3, linewidth=2.5, step='post')
+            if hasattr(prediction, 'numpy'):
+                pred_val = float(prediction.numpy()[0][0])
+            elif isinstance(prediction, dict):
+                pred_val = float(next(iter(prediction.values()))[0][0])
+            else:
+                pred_val = float(prediction[0][0])
+                
+            predictions.append(pred_val)
+        
+        valid_features['prediction'] = predictions
+    
+    # Create animation
+    print("Creating animation...")
+    
+    cumulative_features = {
+        'frames': [], 'times': [], 'hr_mean': [], 'hr_max': [], 'hr_min': [], 
+        'hrv': [], 'snr': [], 'predictions': [], 'pred_times': [],
+        'ecg_data': [], 'ecg_times': []
+    }
+    
+    def animate_from_dataframe(frame_idx):
+        if frame_idx >= len(df):
+            return
+        
+        row = df.iloc[frame_idx]
+        
+        for ax in axs:
+            ax.clear()
+        
+        # Plot current ECG window
+        if row['ecg_plot'] is not None and len(row['ecg_plot']) > 0:
+            axs[0].plot(row['time_plot'], row['ecg_plot'], 'k-', linewidth=0.8)
+            axs[0].set_title(f'Current ECG Window - Frame {row["frame"]} - Noise STD: {row["noise_std"]:.3f}')
+            axs[0].set_ylabel('Amplitude (mV)')
+            axs[0].grid(True, alpha=0.3)
+        else:
+            axs[0].set_title(f'ECG Signal - Frame {row["frame"]} - Buffer filling...')
+            axs[0].set_ylabel('Amplitude (mV)')
+            axs[0].grid(True, alpha=0.3)
+        
+        # Update cumulative features
+        if row['features_valid'] and not pd.isna(row['hr_mean']):
+            cumulative_features['frames'].append(row['frame'])
+            cumulative_features['times'].append(row['time_global'])
+            cumulative_features['hr_mean'].append(row['hr_mean'])
+            cumulative_features['hr_max'].append(row['hr_max'])
+            cumulative_features['hr_min'].append(row['hr_min'])
+            cumulative_features['hrv'].append(row['hrv'])
+            cumulative_features['snr'].append(row['snr'])
             
-    plt.tight_layout()
-    frame_count += 1  # Increment frame count
+            if row['ecg_plot'] is not None and len(row['ecg_plot']) > 0:
+                if len(cumulative_features['ecg_times']) == 0:
+                    time_offset = 0
+                    cumulative_features['ecg_times'].extend([time_offset + i/250 for i in range(len(row['ecg_plot']))])
+                else:
+                    last_time = cumulative_features['ecg_times'][-1]
+                    time_step = 1/250
+                    cumulative_features['ecg_times'].extend([last_time + time_step + i*time_step for i in range(len(row['ecg_plot']))])
+                
+                cumulative_features['ecg_data'].extend(row['ecg_plot'])
+            
+            # Add predictions
+            if 'valid_features' in locals() and len(valid_features) > 0:
+                matching_rows = valid_features[valid_features['frame'] == row['frame']]
+                if len(matching_rows) > 0 and 'prediction' in matching_rows.columns:
+                    prediction_val = matching_rows.iloc[0]['prediction']
+                    if not pd.isna(prediction_val):
+                        cumulative_features['predictions'].append(prediction_val)
+                        cumulative_features['pred_times'].append(row['time_global'])
+        
+        # Plot cumulative ECG
+        if len(cumulative_features['ecg_data']) > 0:
+            axs[1].plot(cumulative_features['ecg_times'], cumulative_features['ecg_data'], 'k-', linewidth=0.8)
+            
+            if (row['features_valid'] and not pd.isna(row['hr_mean']) and 
+                row['ecg_plot'] is not None and len(row['ecg_plot']) > 0):
+                
+                current_segment_length = len(row['ecg_plot'])
+                if len(cumulative_features['ecg_times']) >= current_segment_length:
+                    current_times = cumulative_features['ecg_times'][-current_segment_length:]
+                    current_data = cumulative_features['ecg_data'][-current_segment_length:]
+                    axs[1].plot(current_times, current_data, 'red', linewidth=1.2, alpha=0.8)
+            
+            total_duration = len(cumulative_features['ecg_data']) / 250
+            axs[1].set_title(f'Cumulative ECG Signal - Total: {total_duration:.1f}s')
+            axs[1].set_ylabel('Amplitude (mV)')
+            axs[1].grid(True, alpha=0.3)
+            
+            if len(cumulative_features['ecg_times']) > 0:
+                axs[1].set_xlim(cumulative_features['ecg_times'][0], cumulative_features['ecg_times'][-1])
+        else:
+            feature_count = len(cumulative_features['times'])
+            axs[1].text(0.5, 0.5, f'Waiting for valid features to accumulate ECG...\n(Have {feature_count} valid frames)', 
+                       ha='center', va='center', transform=axs[1].transAxes, fontsize=10)
+            axs[1].set_title('Cumulative ECG Signal')
+            axs[1].set_ylabel('Amplitude (mV)')
+            axs[1].grid(True, alpha=0.3)
+        
+        # Plot feature time series
+        if len(cumulative_features['times']) > 0:
+            times = cumulative_features['times']
+            
+            axs[2].plot(times, cumulative_features['snr'], 'purple', linewidth=2)
+            axs[2].set_title('Signal-to-Noise Ratio (SNR)')
+            axs[2].set_ylabel('SNR (dB)')
+            axs[2].set_ylim(0, 30)
+            axs[2].grid(True, alpha=0.3)
 
-# Set animation parameters
-num_frames = 1650
-interval = 50  # milliseconds
+            axs[3].plot(times, cumulative_features['hr_mean'], 'blue', linewidth=2)
+            axs[3].set_title('Mean Heart Rate')
+            axs[3].set_ylabel('HR (BPM)')
+            axs[3].axhline(y=70, color='red', linestyle='--', alpha=0.5)
+            axs[3].grid(True, alpha=0.3)
 
-# Set up plot
-fig, axs = plt.subplots(7, 1, figsize=(15, 10), sharex=True)
+            axs[4].plot(times, cumulative_features['hr_max'], 'red', linewidth=2)
+            axs[4].set_title('Maximum Heart Rate')
+            axs[4].set_ylabel('HR (BPM)')
+            axs[4].grid(True, alpha=0.3)
 
-# Create animation object
-ani = animation.FuncAnimation(fig, animate, frames=num_frames, interval=interval, blit=False)
+            axs[5].plot(times, cumulative_features['hr_min'], 'green', linewidth=2)
+            axs[5].set_title('Minimum Heart Rate')
+            axs[5].set_ylabel('HR (BPM)')
+            axs[5].grid(True, alpha=0.3)
 
-# Show the animation
-plt.show()
+            axs[6].plot(times, cumulative_features['hrv'], 'black', linewidth=2)
+            axs[6].set_title('Heart Rate Variability (RMSSD)')
+            axs[6].set_ylabel('HRV (ms)')
+            axs[6].grid(True, alpha=0.3)
+        
+        # Plot predictions
+        if len(cumulative_features['predictions']) > 0:
+            pred_times = cumulative_features['pred_times']
+            predictions = cumulative_features['predictions']
+            
+            axs[7].plot(pred_times, predictions, 'black', linewidth=2)
+            axs[7].axhline(y=0.5, linestyle='--', color='red', alpha=0.7)
+            axs[7].fill_between(pred_times, predictions, 
+                              where=(np.array(predictions) >= 0.5), 
+                              color='red', alpha=0.3)
+            axs[7].set_title(f'Model Prediction Probability ({len(predictions)} predictions)')
+            axs[7].set_ylabel('Probability')
+            axs[7].set_ylim([0, 1])
+            axs[7].grid(True, alpha=0.3)
+        else:
+            feature_count = len(cumulative_features['times'])
+            if feature_count > 0:
+                axs[7].text(0.5, 0.5, f'Waiting for predictions...\n(Have {feature_count} features)', 
+                           ha='center', va='center', transform=axs[7].transAxes, fontsize=10)
+            else:
+                axs[7].text(0.5, 0.5, 'Waiting for valid features...', 
+                           ha='center', va='center', transform=axs[7].transAxes, fontsize=10)
+            axs[7].set_title('Model Prediction Probability')
+            axs[7].set_ylabel('Probability')
+            axs[7].set_ylim([0, 1])
+            axs[7].grid(True, alpha=0.3)
+        
+        axs[-1].set_xlabel('Time (s)')
+        
+        total_ecg_duration = len(cumulative_features['ecg_data']) / 250 if len(cumulative_features['ecg_data']) > 0 else 0
+        total_features = len(cumulative_features['times'])
+        total_predictions = len(cumulative_features['predictions'])
+        
+        fig.suptitle(f'Real-time ECG Analysis - Frame {frame_idx + 1}/{len(df)} | Cumulative ECG: {total_ecg_duration:.1f}s | Features: {total_features} | Predictions: {total_predictions}', fontsize=12)
+        
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.93)
+    
+    fig, axs = plt.subplots(8, 1, figsize=(12, 12))
+    
+    anim = animation.FuncAnimation(
+        fig, animate_from_dataframe, 
+        frames=len(df), 
+        interval=50,
+        blit=False, 
+        repeat=False
+    )
+    
+    # Save animation
+    try:
+        Writer = animation.writers['ffmpeg']
+        writer = Writer(fps=25, metadata=dict(artist='ECG Analyzer'), bitrate=1800)
+        anim.save('ecg_analysis_animation.mp4', writer=writer)
+        print("Animation saved as 'ecg_analysis_animation.mp4'")
+    except:
+        try:
+            anim.save('ecg_analysis_animation.gif', writer='pillow', fps=5)
+            print("Animation saved as 'ecg_analysis_animation.gif'")
+        except Exception as e:
+            print(f"Could not save animation: {e}")
+            plt.show()
+    
+    return df, valid_features
 
-# Create a figure with two subplots side by side
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-
-# Plot the second scatter plot on the right subplot (ax2)
-ax1.scatter(hr_mean, snr_values, color='purple', alpha=0.5)
-ax1.set_title('SNR vs Mean Heart Rate')
-ax1.set_xlabel('Mean Heart Rate')
-ax1.set_ylabel('SNR (dB)')
-# Add a vertical dashed line at x-axis value 70 with the label "Synaptic Heart Rate"
-ax1.axvline(x=70, color='red', linestyle='--', label='Real Heart Rate')
-ax1.legend()
-
-# Plot the first scatter plot on the left subplot (ax1)
-ax2.scatter(heart_rate_variability, snr_values, color='purple', alpha=0.5)
-ax2.set_title('SNR vs Heart Rate Variability')
-ax2.set_xlabel('Heart Rate Variability')
-ax2.set_ylabel('SNR (dB)')
-
-# Adjust spacing between subplots
-plt.tight_layout()
-
-# Show the combined plot with two subplots
-plt.show()
-
-
-# Sample data (replace this with your actual data)
-data = np.column_stack((hr_mean, heart_rate_variability, snr_values))
-
-# Create a figure with two subplots
-fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-
-# K-Means Clustering
-# Fit K-Means with only 2 clusters to exclude outliers
-kmeans = KMeans(n_clusters=2, random_state=0, n_init=10)
-cluster_labels = kmeans.fit_predict(data)
-cluster_centers = kmeans.cluster_centers_
-
-# Plot 1: Heart Rate vs. SNR
-ax1 = axes[0]
-ax1.scatter(data[:, 0], data[:, 2], c=cluster_labels, cmap='viridis', s=100)
-ax1.scatter(cluster_centers[:, 0], cluster_centers[:, 2], c='yellow', marker='*', s=300, edgecolors='black')
-ax1.set_xlabel("Heart Rate")
-ax1.set_ylabel("SNR")
-ax1.set_title("Heart Rate vs. SNR (K-Means)")
-ax1.grid(False)
-
-# Plot 2: Heart Rate Variability vs. SNR
-ax2 = axes[1]
-ax2.scatter(data[:, 1], data[:, 2], c=cluster_labels, cmap='viridis', s=100)
-ax2.scatter(cluster_centers[:, 1], cluster_centers[:, 2], c='yellow', marker='*', s=300, edgecolors='black')
-ax2.set_xlabel("Heart Rate Variability")
-ax2.set_ylabel("SNR")
-ax2.set_title("Heart Rate Variability vs. SNR (K-Means)")
-ax2.grid(False)
-
-# Show the K-Means plots
-plt.show()
-
-# Gaussian Mixture Model (GMM) Clustering
-# Fit Gaussian Mixture Model with 2 components (clusters) to exclude outliers
-gmm = GaussianMixture(n_components=2, random_state=0)
-cluster_probs = gmm.fit(data).predict_proba(data)  # Get the cluster probabilities
-cluster_centers = gmm.means_
-
-# Create a figure with two subplots
-fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-
-# Plot 1: Heart Rate vs. SNR
-ax1 = axes[0]
-ax1.scatter(data[:, 0], data[:, 2], c=cluster_probs[:, 0], cmap='viridis', s=100, alpha=0.5)
-ax1.scatter(cluster_centers[:, 0], cluster_centers[:, 2], c='yellow', marker='*', s=300, edgecolors='black')
-ax1.set_xlabel("Heart Rate")
-ax1.set_ylabel("SNR")
-ax1.set_title("Heart Rate vs. SNR (GMM)")
-ax1.grid(False)
-
-# Plot 2: Heart Rate Variability vs. SNR
-ax2 = axes[1]
-ax2.scatter(data[:, 1], data[:, 2], c=cluster_probs[:, 0], cmap='viridis', s=100, alpha=0.5)
-ax2.scatter(cluster_centers[:, 1], cluster_centers[:, 2], c='yellow', marker='*', s=300, edgecolors='black')
-ax2.set_xlabel("Heart Rate Variability")
-ax2.set_ylabel("SNR")
-ax2.set_title("Heart Rate Variability vs. SNR (GMM)")
-ax2.grid(False)
-
-# Show the GMM plots
-plt.show()
+if __name__ == "__main__":
+    df, valid_features = generate_ecg_data_and_animate()
