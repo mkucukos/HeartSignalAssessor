@@ -109,16 +109,143 @@ Implements sophisticated noise testing:
 - Extended runs (200+): Stress testing up to 2.00 STD with gradual recovery phases
 
 ### Feature Extraction Pipeline
-- 30-second sliding window feature extraction
-- Cumulative signal processing that builds continuously like real-time systems
-- Feature set includes HR mean/max/min, HRV (RMSSD), and SNR
-- Quality control with z-score outlier removal and validation
+
+#### Step 1 — Signal Filtering & Cleaning
+The raw ECG is processed through two sequential steps before any feature extraction:
+
+```
+Raw ECG
+  │
+  ▼
+Butterworth Bandpass Filter (4th order, 0.25 – 25 Hz)
+  │  Removes baseline wander (<0.25 Hz) and high-frequency EMG noise (>25 Hz)
+  ▼
+NeuroKit2 ecg_clean()
+  │  Applies additional signal conditioning and amplitude normalisation
+  ▼
+Cleaned ECG  ──────────────────────────────────────────────┐
+  │                                                         │ (used later for SNR)
+  ▼                                                         │
+R-peak Detection  (engzeemod2012 algorithm)                 │
+```
+
+#### Step 2 — R-peak Detection and RR Intervals
+
+The Engzee-Modified (2012) algorithm locates each R-peak in the cleaned signal. R-peaks are the sharp, high-amplitude spikes of the ECG complex:
+
+```
+Amplitude (mV)
+  │         R                       R                       R
+  │        /|\                     /|\                     /|\
+  │       / | \                   / | \                   / | \
+  │   P  /  |  \ T           P  /  |  \ T           P  /  |  \ T
+  │  /\ /   |   \/\         /\ /   |   \/\         /\ /   |   \/\
+  │ /  V    |    \ \/\/\   /  V    |    \ \/\/\   /  V    |    \
+──┼─────────┼─────────────────────┼─────────────────────┼──────────▶ time (s)
+             t₁                    t₂                    t₃
+
+  │←── RR₁ = t₂ − t₁ ──────────▶│←── RR₂ = t₃ − t₂ ──────────▶│
+
+  Heart Rate (BPM) = 60 / RR interval
+```
+
+RR intervals are the time gaps between consecutive R-peaks. A 30-second window at 70 BPM yields ~35 RR intervals for statistics.
+
+#### Step 3 — Outlier Rejection (z-score filter, threshold = 5.0)
+
+Ectopic beats and detection artefacts produce anomalous RR values. These are removed with a z-score filter applied to both heart rate values and their successive differences (used for HRV):
+
+```
+Heart rate values:  [68, 71, 70, 145, 69, 72]
+                                 ↑
+                         z-score > 5.0  → rejected
+
+Retained values:    [68, 71, 70,      69, 72]   ← used for HR mean/max/min
+
+Successive RR diffs (ΔRR):  [3, 1, 75, 3]
+                                     ↑
+                             z-score > 5.0  → rejected
+
+Retained ΔRR:       [3, 1,      3]            ← used for HRV (RMSSD)
+```
+
+A threshold of **5.0** is intentionally permissive — it removes only extreme physiological outliers while preserving real rate fluctuations that a stricter threshold (e.g. 2.0) would incorrectly discard under noisy conditions.
+
+#### Step 4 — Heart Rate Statistics
+
+From the filtered heart rate series:
+
+| Feature  | Formula                          |
+|----------|----------------------------------|
+| HR mean  | mean(HR values) in BPM           |
+| HR max   | max(HR values) in BPM            |
+| HR min   | min(HR values) in BPM            |
+
+#### Step 5 — Heart Rate Variability (HRV / RMSSD-like)
+
+HRV quantifies beat-to-beat fluctuations and reflects autonomic nervous system activity:
+
+```
+RR intervals (ms):   [857, 833, 870, 847, 862, ...]
+Successive diffs ΔRR: [  24,  37,  23,  15, ...]  (|RRₙ₊₁ − RRₙ|)
+HRV = √( mean(ΔRR²) )   ← root mean square of successive differences
+```
+
+Higher HRV indicates healthy autonomic regulation; lower values appear under stress or noise degradation.
+
+#### Step 6 — SNR Calculation via R-peak Windows
+
+Signal-to-Noise Ratio is computed by comparing the raw noisy signal against the cleaned signal **inside a ±0.1 s window centred on every R-peak**:
+
+```
+ECG amplitude
+  │                     ┌─────────────┐
+  │                     │  SNR window │
+  │                     │  (0.2 s)    │
+  │               R-peak│             │
+  │              ╱│╲    │             │
+  │             ╱ │ ╲   │             │
+  │  ─────────╱──┼──╲──┼─────────────┼────▶ time
+  │           │  │   │  │             │
+  │        −0.1s  t_R  +0.1s          │
+  │                                   │
+  │  raw (noisy):   ∿╱│╲∿∿∿   ← includes noise
+  │  cleaned:        ╱ │ ╲    ← filtered reference
+  │                 └──┴──┘
+  │               extracted samples
+
+  signal_power = var( raw_window )
+  noise_power  = var( raw_window − cleaned_window )
+  SNR (dB)     = 10 · log₁₀( signal_power / noise_power )
+```
+
+The ±0.1 s window (25 samples at 250 Hz per side, 50 samples total per beat) captures the full QRS complex and enough baseline on both flanks for a stable power estimate. A wider window (vs the previous ±0.05 s) reduces variance in the SNR estimate and makes it more robust under moderate noise.
+
+#### Complete Feature Extraction Summary
+
+```
+Cleaned ECG (30 s window, 250 Hz)
+  │
+  ├─▶ R-peak times ──▶ RR intervals ──▶ z-filter ──▶ HR mean / max / min
+  │                         │
+  │                         └──▶ ΔRR ──▶ z-filter ──▶ HRV (RMSSD-like)
+  │
+  └─▶ ±0.1 s windows around each R-peak
+           │
+           ├── raw samples    ──▶ signal_power = var(raw)
+           └── cleaned samples ──▶ noise_power  = var(raw − clean)
+                                       │
+                                       └──▶ SNR (dB) = 10·log₁₀(Ps/Pn)
+
+Output feature vector: [ HR_mean, HR_max, HR_min, HRV, SNR ]
+```
 
 ### Machine Learning Classification
 - Rolling normalization using cumulative data history for standardization
 - Pre-trained TensorFlow saved model for ECG classification
 - Real-time prediction with continuous probability assessment
 - Adaptive scaling with StandardScaler applied to growing datasets
+- Model input: 4 features — HR mean, HR max, HR min, HRV (RMSSD); SNR is tracked separately for visualization
 
 ## Results
 
