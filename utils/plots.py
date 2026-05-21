@@ -23,7 +23,7 @@ def save_snr_cluster_plot(
     2. SNR vs HRV      — same boundary
     3. HR vs HRV       — coloured by SNR; cluster annotations show drift
     """
-    valid = df[df["features_valid"]].copy()
+    valid = df[df["features_valid"] & df["hr_mean"].notna() & df["hrv"].notna()].copy()
     if len(valid) == 0:
         print("No valid features to plot.")
         return
