@@ -99,7 +99,7 @@ def generate_ecg_data(
         # --- Feature extraction over 30-second sliding window ---
         min_samples = window_size * fs
         features_valid = False
-        features = np.full(7, np.nan)
+        features = np.full(6, np.nan)
 
         if len(cumulative_ecg) >= min_samples:
             ecg_win = np.array(cumulative_ecg[-min_samples:])
@@ -136,7 +136,6 @@ def generate_ecg_data(
             "hrv":                 features[3],
             "snr":                 features[4],
             "flatline_ratio":      features[5],
-            "baseline_wander":     features[6],
             "is_flatline_period":  is_flatline_period(frame_idx),
             "features_valid":      features_valid,
         })

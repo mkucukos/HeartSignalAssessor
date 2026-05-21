@@ -18,9 +18,10 @@ ENV/
 # Model (proprietary, not redistributed)
 model/
 
-# Output files
+# Output files (too large for GitHub — generate locally with python main.py)
 *.mp4
 *.avi
+*.gif
 
 # Jupyter
 .ipynb_checkpoints/

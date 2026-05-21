@@ -67,8 +67,8 @@ Console output logs frame-by-frame processing progress and the data-driven SNR t
 - **Progressive Noise Testing**: Implements comprehensive noise schedule to test algorithm robustness (0.01 to 2.00 STD)
 - **Real-time Processing**: Extracts features from 30-second sliding windows using cumulative signal processing
 - **Automated SNR Boundary Detection**: K-means clustering determines the signal quality threshold from the data itself
-- **9-Panel Real-time Visualization**: Animated visualization of the entire ECG analysis pipeline
-- **Signal Quality Metrics**: Flatline Ratio and Baseline Wander Ratio (sourced from [physio-qc-toolkit](https://github.com/mkucukos/physio-qc-toolkit))
+- **8-Panel Real-time Visualization**: Animated visualization of the entire ECG analysis pipeline
+- **Signal Quality Metrics**: Flatline Ratio with automatic SNR zeroing (sourced from [physio-qc-toolkit](https://github.com/mkucukos/physio-qc-toolkit))
 
 ### Advanced Signal Processing
 - Bandpass filtering (0.25–30 Hz) with ECG cleaning
@@ -78,16 +78,15 @@ Console output logs frame-by-frame processing progress and the data-driven SNR t
 - Real-time signal-to-noise ratio (SNR) computation via R-peak windows
 
 ### Visualization Components
-The animation provides 9 synchronized subplots:
-1. Current ECG window (10-second tail)
+The animation provides 8 synchronized subplots:
+1. Current ECG window (10-second tail) — shaded red during flatline periods
 2. Cumulative ECG signal timeline with highlighted current segment
-3. Real-time SNR tracking (0–15 dB range)
+3. Real-time SNR tracking (0–15 dB range) — drops to 0 on flatline detection
 4. Mean heart rate with 70 BPM reference line
 5. Maximum heart rate over time
 6. Minimum heart rate over time
 7. Heart rate variability (RMSSD-like)
 8. Flatline Ratio (threshold 0.5)
-9. Baseline Wander Ratio (threshold 0.30)
 
 ## Algorithm
 
@@ -230,7 +229,7 @@ Output feature vector: [ HR_mean, HR_max, HR_min, HRV, SNR ]
 
 ### Signal Quality Metrics
 
-Two additional signal integrity checks are applied to every 30-second window, sourced from [physio-qc-toolkit](https://github.com/mkucukos/physio-qc-toolkit):
+A flatline integrity check is applied to every 30-second window, sourced from [physio-qc-toolkit](https://github.com/mkucukos/physio-qc-toolkit):
 
 #### Flatline Ratio
 
@@ -244,19 +243,17 @@ Returns 1.0 (flatline) if ANY condition holds:
 Otherwise returns 0.0
 ```
 
-#### Baseline Wander Ratio
+#### Flatline → SNR = 0
 
-Quantifies the fraction of signal power in the sub-cardiac band (< 0.3 Hz), indicating slow electrode drift or movement artefact:
+When a flatline is detected, the pipeline **short-circuits R-peak detection** and immediately sets SNR to 0, reflecting that a flat signal carries no cardiac information:
 
 ```
-freqs = rfftfreq(N, 1/fs)
-psd   = |rfft(signal)|²
-baseline_wander = Σ psd[freqs ≤ 0.3 Hz] / Σ psd[all freqs]
-
-Threshold: ratio > 0.30 → problematic baseline wander
+flatline_ratio == 1.0
+  → skip bandpass filter, ecg_clean, R-peak detection
+  → return [NaN, NaN, NaN, NaN, SNR=0, flatline=1.0]
 ```
 
-Both metrics are computed per frame, stored in the dataframe, and visualised as panels 8 and 9 in the animation.
+This ensures the SNR panel drops to zero visibly during flatline periods and cardiac metrics are not computed on meaningless data. Panel 0 (current ECG window) is also shaded red with a warning label during these frames.
 
 ### SNR Quality Boundary — Automated K-means Clustering
 
