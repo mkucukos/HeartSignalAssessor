@@ -24,17 +24,19 @@ This repository provides comprehensive tools for ECG signal analysis, designed t
 
 To run this project, you'll need to have the following dependencies installed:
 
-- **NumPy** (Version 1.21.3)
-- **Pandas** (Version 1.3.4)
-- **Matplotlib** (Version 3.4.3)
-- **SciPy** (Version 1.7.3)
-- **Scikit-learn** (Version 0.24.2)
-- **TensorFlow** (Version 2.6.0)
-- **Neurokit2** (Version 0.1.1)
+- **NumPy** (Version 1.23.5)
+- **Pandas** (Version 2.2.3)
+- **Matplotlib** (Version 3.9.4)
+- **SciPy** (Version 1.10.1)
+- **Scikit-learn** (Version 1.3.2)
+- **TensorFlow** (Version 2.10.1)
+- **Neurokit2** (Version 0.2.5)
 
 You can install these dependencies using pip:
 
+```bash
 pip install -r requirements.txt
+```
 
 ## Installation
 
@@ -50,7 +52,9 @@ To use this code, follow these steps:
 2. Clone or download this repository to your local machine
 3. Run the Python script:
 
+```bash
 python animation_real_time_with_SNR.py
+```
 
 This script will generate an animated plot showing the ECG signal analysis in real-time.
 
@@ -99,9 +103,10 @@ The system generates realistic ECG signals incorporating:
 Implements sophisticated noise testing:
 - Frames 0-20: Clean signal (0.01 STD)
 - Frames 20-50: Low noise (0.05 STD)
-- Frames 50-100: Moderate to high noise (0.15-0.30 STD)
+- Frames 50-75: Moderate noise (0.15 STD)
+- Frames 75-100: High noise (0.30 STD)
 - Frames 100-200: Extreme noise testing (0.45-1.00 STD)
-- Extended frames: Stress testing up to 2.00 STD with recovery phases
+- Extended runs (200+): Stress testing up to 2.00 STD with gradual recovery phases
 
 ### Feature Extraction Pipeline
 - 30-second sliding window feature extraction
@@ -159,7 +164,7 @@ The animated plot provides real-time insights into ECG signal analysis. You can 
 - The model cannot be redistributed without explicit permission
 
 **Contacting for Model Access:**
-Please reach out to **murat.kucukosmanoglu@dprime.ai** with:
+Please reach out to **muratkosmanoglu@gmail.com** with:
 - Your intended use case for the model
 - Research or educational purpose description
 - Institutional affiliation (if applicable)
@@ -174,7 +179,7 @@ If you want to use this code framework with your own model:
 ## Contact
 
 **Project Maintainer**: Murat Kucukosmanoglu
-**Email**: murat.kucukosmanoglu@dprime.ai
+**Email**: muratkosmanoglu@gmail.com
 
 For any questions or inquiries, feel free to reach out for:
 - **Model access requests** (Required for running the code)
