@@ -53,7 +53,7 @@ This will run the full pipeline and produce two output files in the `assets/` di
 
 | Output | Description |
 |--------|-------------|
-| `assets/ecg_analysis_animation.gif` | 7-panel real-time ECG animation (MP4 if FFmpeg is available) |
+| `assets/ecg_analysis_animation.gif` | 8-panel real-time ECG animation (MP4 if FFmpeg is available) |
 | `assets/snr_cluster_plot.png` | SNR vs HR & HRV cluster drift analysis |
 
 Console output logs frame-by-frame processing progress and the data-driven SNR threshold.
@@ -79,7 +79,7 @@ Console output logs frame-by-frame processing progress and the data-driven SNR t
 The animation provides 8 synchronized subplots:
 1. Current ECG window (10-second tail) — shaded red during flatline periods
 2. Cumulative ECG signal timeline with highlighted current segment
-3. Real-time SNR tracking (0–15 dB range) — drops to 0 on flatline detection
+3. Real-time SNR tracking (0–18 dB range) — drops to 0 on flatline detection
 4. Mean heart rate with 70 BPM reference line
 5. Maximum heart rate over time
 6. Minimum heart rate over time
@@ -96,13 +96,18 @@ The system generates realistic ECG signals incorporating:
 - Random walk components for physiological drift
 
 ### Progressive Noise Schedule
+
+300 frames × 10 s = **3000 s total signal**. Two simulated flatline windows interrupt the escalation.
+
 ```
-Frames   0– 20 : Clean signal       (0.01 STD)
-Frames  20– 50 : Low noise          (0.05 STD)
-Frames  50– 75 : Moderate noise     (0.15 STD)
-Frames  75–100 : High noise         (0.30 STD)
-Frames 100–200 : Extreme noise      (0.45–1.00 STD)
-Frames  200+   : Stress testing up to 2.00 STD with gradual recovery
+Frames   0– 20 : Clean signal            (0.01 STD)        seconds    0–  200
+Frames  20– 65 : Gradual escalation      (0.03–0.12 STD)   seconds  200–  650
+Frames  65– 95 : Moderate–high noise     (0.20–0.35 STD)   seconds  650–  950
+Frames  95–100 : Pre-flatline peak       (0.35 STD)        seconds  950– 1000
+Frames 100–120 : *** Flatline 1 ***      (SNR = 0)         seconds 1000– 1200
+Frames 120–200 : Post-flatline peak      (0.50–2.00 STD)   seconds 1200– 2000
+Frames 200–220 : *** Flatline 2 ***      (SNR = 0)         seconds 2000– 2200
+Frames 220–300 : Gradual recovery        (1.60–0.10 STD)   seconds 2200– 3000
 ```
 
 ### Feature Extraction Pipeline
@@ -145,23 +150,23 @@ Amplitude (mV)
 
 A 30-second window at 70 BPM yields ~35 RR intervals for statistics.
 
-#### Step 3 — Outlier Rejection (z-score threshold = 5.0)
+#### Step 3 — Outlier Rejection (z-score threshold = 10.0)
 
 ```
 Heart rate values:  [68, 71, 70, 145, 69, 72]
                                  ↑
-                         z-score > 5.0  → rejected
+                         z-score > 10.0  → rejected
 
 Retained:           [68, 71, 70,      69, 72]   ← HR mean / max / min
 
 Successive ΔRR:     [3, 1, 75, 3]
                              ↑
-                     z-score > 5.0  → rejected
+                     z-score > 10.0  → rejected
 
 Retained ΔRR:       [3, 1,      3]              ← HRV (RMSSD-like)
 ```
 
-Threshold of 5.0 is permissive by design — removes only extreme artefacts while preserving real physiological fluctuations.
+Threshold of 10.0 is intentionally permissive — removes only extreme artefacts while preserving real physiological fluctuations.
 
 #### Step 4 — Heart Rate Statistics
 
@@ -204,12 +209,12 @@ ECG amplitude
   SNR (dB)     = 10 · log₁₀( signal_power / noise_power )
 ```
 
-The ±0.1 s window (50 samples per beat at 250 Hz) captures the full QRS complex with enough flanking baseline for a stable power estimate.
+The ±0.1 s window (~26 samples per beat at 128 Hz) captures the full QRS complex with enough flanking baseline for a stable power estimate.
 
 #### Complete Feature Extraction Summary
 
 ```
-Cleaned ECG (30 s window, 250 Hz)
+Cleaned ECG (30 s window, 128 Hz)
   │
   ├─▶ R-peak times ──▶ RR intervals ──▶ z-filter ──▶ HR mean / max / min
   │                         │
@@ -286,7 +291,7 @@ This approach lets the **data itself reveal** where HR and HRV start drifting fr
 
 ![ECG Analysis Animation](assets/ecg_analysis_animation.gif)
 
-The animation demonstrates real-time ECG signal processing under progressive noise conditions across 7 synchronized panels — ECG waveform, cumulative signal, SNR, mean/max/min heart rate, and HRV.
+The animation demonstrates real-time ECG signal processing across 8 synchronized panels — ECG waveform, cumulative signal, SNR (0–18 dB), mean/max/min heart rate, HRV, and flatline ratio. Two simulated flatline windows (seconds 1000–1200 and 2000–2200) cause visible SNR drops to 0 and red-shaded ECG panels.
 
 ### SNR Cluster Drift Analysis
 
