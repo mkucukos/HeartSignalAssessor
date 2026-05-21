@@ -22,6 +22,7 @@ model/
 *.mp4
 *.avi
 *.gif
+!assets/ecg_analysis_animation.gif
 
 # Jupyter
 .ipynb_checkpoints/
