@@ -9,7 +9,7 @@ from .noise import get_noise_std, is_flatline_period
 
 def generate_ecg_data(
     fs: int = 128,
-    num_frames: int = 500,
+    num_frames: int = 300,
     window_size: int = 30,
     plot_tail: int = 10,
     duration_per_frame: int = 10,
