@@ -2,8 +2,6 @@
 
 Advanced Python implementation for ECG signal processing, feature extraction, and real-time visualization with progressive noise simulation.
 
-![ECG Analysis Demo](assets/ecg_analysis_animation.gif)
-
 ## Table of Contents
 
 1. [Introduction](#introduction)
