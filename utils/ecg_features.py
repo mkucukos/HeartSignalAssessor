@@ -10,7 +10,7 @@ SNR_WINDOW_SEC = 0.1
 def get_ecg_features(ecg, time_in_sec, fs):
     """Extract HR statistics, HRV, and SNR from a raw ECG segment."""
     try:
-        b, a = butter(4, (0.25, 25), 'bandpass', fs=fs)
+        b, a = butter(4, (0.25, 30), 'bandpass', fs=fs)
         ecg_filt = filtfilt(b, a, ecg, axis=0)
         ecg_cleaned = nk.ecg_clean(ecg_filt, sampling_rate=fs)
         _, rpeaks = nk.ecg_peaks(ecg_cleaned, sampling_rate=fs, method="engzeemod2012")
