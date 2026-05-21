@@ -5,6 +5,7 @@ from scipy.signal import butter, filtfilt
 
 from .ecg_features import get_ecg_features
 from .noise import get_noise_std
+from .signal_quality import flatline_ratio, baseline_wander_ratio
 
 
 def generate_ecg_data(
@@ -93,6 +94,8 @@ def generate_ecg_data(
         min_samples = window_size * fs
         features_valid = False
         features = np.full(5, np.nan)
+        flatline = np.nan
+        baseline_wander = np.nan
 
         if len(cumulative_ecg) >= min_samples:
             ecg_win = np.array(cumulative_ecg[-min_samples:])
@@ -103,6 +106,8 @@ def generate_ecg_data(
                 features_valid = bool(np.all(np.isfinite(features)))
             except Exception:
                 pass
+            flatline        = flatline_ratio(ecg_win)
+            baseline_wander = baseline_wander_ratio(ecg_win, fs)
 
         # --- 10-second plot tail (zero-referenced time axis) ---
         tail_samples = plot_tail * fs
@@ -131,6 +136,8 @@ def generate_ecg_data(
             "hr_min":              features[2],
             "hrv":                 features[3],
             "snr":                 features[4],
+            "flatline_ratio":      flatline,
+            "baseline_wander":     baseline_wander,
             "features_valid":      features_valid,
         })
 

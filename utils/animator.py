@@ -13,7 +13,7 @@ def create_animation(
     df: pd.DataFrame,
     output_stem: str = "ecg_analysis_animation",
 ) -> None:
-    """Render and save the 7-panel real-time ECG animation.
+    """Render and save the 9-panel real-time ECG animation.
 
     Parameters
     ----------
@@ -30,10 +30,11 @@ def create_animation(
         "frames": [], "times": [],
         "hr_mean": [], "hr_max": [], "hr_min": [],
         "hrv": [], "snr": [],
+        "flatline_ratio": [], "baseline_wander": [],
         "ecg_data": [], "ecg_times": [],
     }
 
-    fig, axs = plt.subplots(7, 1, figsize=(12, 12))
+    fig, axs = plt.subplots(9, 1, figsize=(12, 15))
 
     def _draw_frame(frame_idx: int) -> None:
         if frame_idx >= len(df):
@@ -57,7 +58,7 @@ def create_animation(
 
         # Accumulate state for valid frames
         if row["features_valid"] and not pd.isna(row["hr_mean"]):
-            for key in ("hr_mean", "hr_max", "hr_min", "hrv", "snr"):
+            for key in ("hr_mean", "hr_max", "hr_min", "hrv", "snr", "flatline_ratio", "baseline_wander"):
                 state[key].append(row[key])
             state["frames"].append(row["frame"])
             state["times"].append(row["time_global"])
@@ -102,14 +103,16 @@ def create_animation(
             axs[1].set_title("Cumulative ECG Signal")
         _style(axs[1], ylabel="Amplitude (mV)")
 
-        # Panels 2-6 — feature time series
+        # Panels 2-8 — feature time series
         if state["times"]:
             t = state["times"]
-            _plot_series(axs[2], t, state["snr"],     "purple", "SNR (dB)",  "Signal-to-Noise Ratio (SNR)", ylim=(0, 15))
-            _plot_series(axs[3], t, state["hr_mean"], "blue",   "HR (BPM)", "Mean Heart Rate",              hline=70)
-            _plot_series(axs[4], t, state["hr_max"],  "red",    "HR (BPM)", "Maximum Heart Rate")
-            _plot_series(axs[5], t, state["hr_min"],  "green",  "HR (BPM)", "Minimum Heart Rate")
-            _plot_series(axs[6], t, state["hrv"],     "black",  "HRV (ms)", "Heart Rate Variability (RMSSD)")
+            _plot_series(axs[2], t, state["snr"],             "purple",     "SNR (dB)",  "Signal-to-Noise Ratio (SNR)",  ylim=(0, 15))
+            _plot_series(axs[3], t, state["hr_mean"],         "blue",       "HR (BPM)", "Mean Heart Rate",               hline=70)
+            _plot_series(axs[4], t, state["hr_max"],          "red",        "HR (BPM)", "Maximum Heart Rate")
+            _plot_series(axs[5], t, state["hr_min"],          "green",      "HR (BPM)", "Minimum Heart Rate")
+            _plot_series(axs[6], t, state["hrv"],             "black",      "HRV (ms)", "Heart Rate Variability (RMSSD)")
+            _plot_series(axs[7], t, state["flatline_ratio"],  "darkorange", "Ratio",    "Flatline Ratio",                ylim=(0, 1), hline=0.5)
+            _plot_series(axs[8], t, state["baseline_wander"], "teal",       "Ratio",    "Baseline Wander Ratio",         ylim=(0, 1), hline=0.3)
 
         axs[-1].set_xlabel("Time (s)")
 

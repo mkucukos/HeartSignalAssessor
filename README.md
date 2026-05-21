@@ -67,7 +67,8 @@ Console output logs frame-by-frame processing progress and the data-driven SNR t
 - **Progressive Noise Testing**: Implements comprehensive noise schedule to test algorithm robustness (0.01 to 2.00 STD)
 - **Real-time Processing**: Extracts features from 30-second sliding windows using cumulative signal processing
 - **Automated SNR Boundary Detection**: K-means clustering determines the signal quality threshold from the data itself
-- **7-Panel Real-time Visualization**: Animated visualization of the entire ECG analysis pipeline
+- **9-Panel Real-time Visualization**: Animated visualization of the entire ECG analysis pipeline
+- **Signal Quality Metrics**: Flatline Ratio and Baseline Wander Ratio (sourced from [physio-qc-toolkit](https://github.com/mkucukos/physio-qc-toolkit))
 
 ### Advanced Signal Processing
 - Bandpass filtering (0.25–30 Hz) with ECG cleaning
@@ -77,7 +78,7 @@ Console output logs frame-by-frame processing progress and the data-driven SNR t
 - Real-time signal-to-noise ratio (SNR) computation via R-peak windows
 
 ### Visualization Components
-The animation provides 7 synchronized subplots:
+The animation provides 9 synchronized subplots:
 1. Current ECG window (10-second tail)
 2. Cumulative ECG signal timeline with highlighted current segment
 3. Real-time SNR tracking (0–15 dB range)
@@ -85,6 +86,8 @@ The animation provides 7 synchronized subplots:
 5. Maximum heart rate over time
 6. Minimum heart rate over time
 7. Heart rate variability (RMSSD-like)
+8. Flatline Ratio (threshold 0.5)
+9. Baseline Wander Ratio (threshold 0.30)
 
 ## Algorithm
 
@@ -224,6 +227,36 @@ Cleaned ECG (30 s window, 250 Hz)
 
 Output feature vector: [ HR_mean, HR_max, HR_min, HRV, SNR ]
 ```
+
+### Signal Quality Metrics
+
+Two additional signal integrity checks are applied to every 30-second window, sourced from [physio-qc-toolkit](https://github.com/mkucukos/physio-qc-toolkit):
+
+#### Flatline Ratio
+
+Detects whether the signal has stalled (stuck ADC, disconnected electrode, or saturated amplifier):
+
+```
+Returns 1.0 (flatline) if ANY condition holds:
+  • var(signal)  < 1e-12          — near-zero power
+  • ptp(signal)  < 1e-6           — no measurable amplitude
+  • mean(|Δs| < 1e-6) > 0.98     — >98% of samples identical
+Otherwise returns 0.0
+```
+
+#### Baseline Wander Ratio
+
+Quantifies the fraction of signal power in the sub-cardiac band (< 0.3 Hz), indicating slow electrode drift or movement artefact:
+
+```
+freqs = rfftfreq(N, 1/fs)
+psd   = |rfft(signal)|²
+baseline_wander = Σ psd[freqs ≤ 0.3 Hz] / Σ psd[all freqs]
+
+Threshold: ratio > 0.30 → problematic baseline wander
+```
+
+Both metrics are computed per frame, stored in the dataframe, and visualised as panels 8 and 9 in the animation.
 
 ### SNR Quality Boundary — Automated K-means Clustering
 
