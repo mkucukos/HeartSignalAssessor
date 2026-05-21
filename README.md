@@ -80,7 +80,7 @@ This script will generate an animated plot showing the ECG signal analysis in re
 The animation provides 7 synchronized subplots:
 1. Current ECG window display (10-second tail)
 2. Cumulative ECG signal timeline with highlighted current segment
-3. Real-time Signal-to-Noise Ratio tracking (0-30 dB range)
+3. Real-time Signal-to-Noise Ratio tracking (0-15 dB range)
 4. Mean heart rate trends with 70 BPM reference line
 5. Maximum heart rate values over time
 6. Minimum heart rate values over time
