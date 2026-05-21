@@ -10,20 +10,30 @@ SNR_WINDOW_SEC    = 0.1
 
 
 def get_ecg_features(ecg, time_in_sec, fs):
-    """Extract HR statistics, HRV, SNR, and flatline ratio from a raw ECG segment.
+    """Extract HR statistics, HRV, SNR, flatline ratio, and inversion flag.
 
-    Flatline is checked first — if detected, SNR is set to 0 and cardiac metrics
-    are returned as NaN without attempting R-peak detection.
+    Checks are applied in order of cost:
+      1. Flatline  — short-circuits immediately (SNR = 0, metrics = NaN).
+      2. Inversion — detected via nk.ecg_invert; inverted windows return
+                     SNR = NaN and metrics = NaN but inversion flag = 1.
+      3. Full feature extraction otherwise.
 
     Returns
     -------
-    np.ndarray of shape (6,):
-        [hr_mean, hr_max, hr_min, hrv, snr, flatline_ratio]
+    np.ndarray of shape (7,):
+        [hr_mean, hr_max, hr_min, hrv, snr, flatline_ratio, inverted]
+        inverted: 1.0 = signal polarity was flipped, 0.0 = normal
     """
-    # --- Flatline check: short-circuit with SNR=0 if signal is flat ---
+    # --- Flatline check ---
     flat = flatline_ratio(ecg)
     if flat == 1.0:
-        return np.array([np.nan, np.nan, np.nan, np.nan, 0.0, flat])
+        return np.array([np.nan, np.nan, np.nan, np.nan, 0.0, flat, 0.0])
+
+    # --- Inversion check (nk.ecg_invert) ---
+    _, is_inverted = nk.ecg_invert(ecg, sampling_rate=fs)
+    inv_flag = float(is_inverted)
+    if is_inverted:
+        return np.array([np.nan, np.nan, np.nan, np.nan, np.nan, flat, inv_flag])
 
     b, a = butter(4, (0.25, 30), 'bandpass', fs=fs)
     ecg_filt    = filtfilt(b, a, ecg, axis=0)
@@ -33,17 +43,17 @@ def get_ecg_features(ecg, time_in_sec, fs):
     try:
         _, rpeaks = nk.ecg_peaks(ecg_cleaned, sampling_rate=fs, method="engzeemod2012")
     except Exception:
-        return np.array([np.nan, np.nan, np.nan, np.nan, np.nan, flat])
+        return np.array([np.nan, np.nan, np.nan, np.nan, np.nan, flat, inv_flag])
 
     rr_times = time_in_sec[rpeaks['ECG_R_Peaks']]
     if len(rr_times) == 0:
-        return np.array([np.nan, np.nan, np.nan, np.nan, np.nan, flat])
+        return np.array([np.nan, np.nan, np.nan, np.nan, np.nan, flat, inv_flag])
 
     # Heart rate from RR intervals
     d_rr = np.diff(rr_times)
     heart_rate = 60 / d_rr
     if heart_rate.size == 0:
-        return np.array([np.nan, np.nan, np.nan, np.nan, np.nan, flat])
+        return np.array([np.nan, np.nan, np.nan, np.nan, np.nan, flat, inv_flag])
 
     valid_hr   = heart_rate[~np.isnan(heart_rate)]
     heart_rate = valid_hr[np.abs(stats.zscore(valid_hr)) <= Z_SCORE_THRESHOLD]
@@ -71,10 +81,10 @@ def get_ecg_features(ecg, time_in_sec, fs):
             raw_segs.extend(ecg[idx])
             clean_segs.extend(ecg_cleaned[idx])
 
-    raw_arr   = np.array(raw_segs)
-    clean_arr = np.array(clean_segs)
-    sig_power  = np.var(raw_arr)
+    raw_arr     = np.array(raw_segs)
+    clean_arr   = np.array(clean_segs)
+    sig_power   = np.var(raw_arr)
     noise_power = np.var(raw_arr - clean_arr)
     snr = 10 * np.log10(sig_power / noise_power)
 
-    return np.array([hr_mean, hr_max, hr_min, hrv, snr, flat])
+    return np.array([hr_mean, hr_max, hr_min, hrv, snr, flat, inv_flag])
