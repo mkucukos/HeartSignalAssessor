@@ -28,8 +28,6 @@ To run this project, you'll need to have the following dependencies installed:
 - **Pandas** (Version 2.2.3)
 - **Matplotlib** (Version 3.9.4)
 - **SciPy** (Version 1.10.1)
-- **Scikit-learn** (Version 1.3.2)
-- **TensorFlow** (Version 2.10.1)
 - **Neurokit2** (Version 0.2.5)
 
 You can install these dependencies using pip:
@@ -69,18 +67,17 @@ This script will generate an animated plot showing the ECG signal analysis in re
 - **Realistic ECG Simulation**: Generates physiologically accurate ECG signals with natural heart rate variations
 - **Progressive Noise Testing**: Implements comprehensive noise schedule to test algorithm robustness (0.01 to 2.00 STD)
 - **Real-time Processing**: Extracts features from 30-second sliding windows using cumulative signal processing
-- **Machine Learning Classification**: Uses pre-trained TensorFlow model with rolling normalization
-- **8-Panel Real-time Visualization**: Creates comprehensive animated visualizations of the entire ECG analysis pipeline
+- **7-Panel Real-time Visualization**: Creates comprehensive animated visualizations of the entire ECG analysis pipeline
 
 ### Advanced Signal Processing
-- Bandpass filtering (0.25-25 Hz) with ECG cleaning
+- Bandpass filtering (0.25-30 Hz) with ECG cleaning
 - R-peak detection using NeuroKit2 advanced algorithms
 - Multi-component noise simulation including Gaussian noise, high-frequency muscle artifacts, and low-frequency baseline wander
 - Heart rate variability (RMSSD) calculation with outlier removal
 - Real-time signal-to-noise ratio (SNR) computation
 
 ### Visualization Components
-The animation provides 8 synchronized subplots:
+The animation provides 7 synchronized subplots:
 1. Current ECG window display (10-second tail)
 2. Cumulative ECG signal timeline with highlighted current segment
 3. Real-time Signal-to-Noise Ratio tracking (0-30 dB range)
@@ -88,7 +85,6 @@ The animation provides 8 synchronized subplots:
 5. Maximum heart rate values over time
 6. Minimum heart rate values over time
 7. Heart rate variability (RMSSD) showing cardiac autonomic function
-8. ML prediction probabilities with 0.5 threshold indicator
 
 ## Algorithm
 
@@ -117,8 +113,8 @@ The raw ECG is processed through two sequential steps before any feature extract
 Raw ECG
   │
   ▼
-Butterworth Bandpass Filter (4th order, 0.25 – 25 Hz)
-  │  Removes baseline wander (<0.25 Hz) and high-frequency EMG noise (>25 Hz)
+Butterworth Bandpass Filter (4th order, 0.25 – 30 Hz)
+  │  Removes baseline wander (<0.25 Hz) and high-frequency EMG noise (>30 Hz)
   ▼
 NeuroKit2 ecg_clean()
   │  Applies additional signal conditioning and amplitude normalisation
@@ -240,13 +236,6 @@ Cleaned ECG (30 s window, 250 Hz)
 Output feature vector: [ HR_mean, HR_max, HR_min, HRV, SNR ]
 ```
 
-### Machine Learning Classification
-- Rolling normalization using cumulative data history for standardization
-- Pre-trained TensorFlow saved model for ECG classification
-- Real-time prediction with continuous probability assessment
-- Adaptive scaling with StandardScaler applied to growing datasets
-- Model input: 4 features — HR mean, HR max, HR min, HRV (RMSSD); SNR is tracked separately for visualization
-
 ## Results
 
 ### Performance Expectations
@@ -260,48 +249,16 @@ The system provides comprehensive analysis with expected performance:
 The generated animation (ecg_analysis_animation.gif or .mp4) demonstrates:
 - Real-time ECG signal processing under progressive noise conditions
 - Feature extraction success rates across different noise levels
-- Machine learning prediction confidence evolution
 - Visual representation of algorithm robustness testing
 
 ### Analysis Features
 The real-time visualization provides:
 - Progressive noise level indicators
 - Cumulative statistics display
-- Visual parameter tracking
-- ML confidence assessment with threshold indicators
+- Visual parameter tracking across all 7 panels
 - Interactive timeline showing ECG analysis evolution
 
-The animated plot provides real-time insights into ECG signal analysis. You can observe changes in heart rate statistics, SNR degradation patterns, heart rate variability trends, and the model's classification probability as the simulation progresses through different noise conditions.
-
-## Important Notes
-
-### Pre-trained Model Requirements
-**CRITICAL**: This implementation requires a pre-trained TensorFlow model that is **NOT included** in this repository. The model is loaded from `./model/` directory and is essential for the machine learning classification functionality.
-
-**Model Details:**
-- The model is trained specifically for ECG signal classification
-- All predictions and classification results shown in the animation are based on this pre-trained model
-- The model expects 4 input features: HR mean, HR max, HR min, and HRV (RMSSD)
-- Model outputs probability values between 0 and 1 for binary classification
-
-**Model Access:**
-- The pre-trained model is **proprietary** and not publicly available
-- To obtain access to the model file, you **MUST contact the author** directly
-- Without the model, the script will fail to run and generate errors
-- The model cannot be redistributed without explicit permission
-
-**Contacting for Model Access:**
-Please reach out to **muratkosmanoglu@gmail.com** with:
-- Your intended use case for the model
-- Research or educational purpose description
-- Institutional affiliation (if applicable)
-
-**Alternative Usage:**
-If you want to use this code framework with your own model:
-1. Train your own TensorFlow model with similar input/output structure
-2. Save it in TensorFlow SavedModel format
-3. Place it in the `./model/` directory
-4. Ensure your model accepts 4 features and outputs single probability value
+The animated plot provides real-time insights into ECG signal analysis. You can observe changes in heart rate statistics, SNR degradation patterns, and heart rate variability trends as the simulation progresses through different noise conditions.
 
 ## Contact
 
@@ -309,7 +266,6 @@ If you want to use this code framework with your own model:
 **Email**: muratkosmanoglu@gmail.com
 
 For any questions or inquiries, feel free to reach out for:
-- **Model access requests** (Required for running the code)
 - Technical assistance with implementation
 - Questions about the algorithm details
 - Collaboration opportunities

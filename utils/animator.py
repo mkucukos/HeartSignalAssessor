@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -12,17 +11,14 @@ _FS = 250  # samples per second — mirrors the pipeline default
 
 def create_animation(
     df: pd.DataFrame,
-    valid_features: pd.DataFrame,
     output_stem: str = "ecg_analysis_animation",
 ) -> None:
-    """Render and save the 8-panel real-time ECG animation.
+    """Render and save the 7-panel real-time ECG animation.
 
     Parameters
     ----------
     df : pd.DataFrame
         Full frame data returned by generate_ecg_data().
-    valid_features : pd.DataFrame
-        Valid-feature subset with a 'prediction' column, returned by generate_ecg_data().
     output_stem : str
         Base filename for the output (without extension).
         MP4 is attempted first; GIF is the fallback.
@@ -35,10 +31,9 @@ def create_animation(
         "hr_mean": [], "hr_max": [], "hr_min": [],
         "hrv": [], "snr": [],
         "ecg_data": [], "ecg_times": [],
-        "predictions": [], "pred_times": [],
     }
 
-    fig, axs = plt.subplots(8, 1, figsize=(12, 12))
+    fig, axs = plt.subplots(7, 1, figsize=(12, 12))
 
     def _draw_frame(frame_idx: int) -> None:
         if frame_idx >= len(df):
@@ -78,14 +73,6 @@ def create_animation(
                     )
                 state["ecg_data"].extend(ecg_plot)
 
-            # Attach prediction for this frame if available
-            match = valid_features[valid_features["frame"] == row["frame"]]
-            if len(match) > 0 and "prediction" in match.columns:
-                pred_val = match.iloc[0]["prediction"]
-                if not pd.isna(pred_val):
-                    state["predictions"].append(pred_val)
-                    state["pred_times"].append(row["time_global"])
-
         # Panel 1 — cumulative ECG timeline with highlighted current segment
         if state["ecg_data"]:
             axs[1].plot(state["ecg_times"], state["ecg_data"], "k-", linewidth=0.8)
@@ -124,42 +111,13 @@ def create_animation(
             _plot_series(axs[5], t, state["hr_min"],  "green",  "HR (BPM)", "Minimum Heart Rate")
             _plot_series(axs[6], t, state["hrv"],     "black",  "HRV (ms)", "Heart Rate Variability (RMSSD)")
 
-        # Panel 7 — ML prediction probability
-        if state["predictions"]:
-            preds = state["predictions"]
-            pred_t = state["pred_times"]
-            axs[7].plot(pred_t, preds, "black", linewidth=2)
-            axs[7].axhline(y=0.5, linestyle="--", color="red", alpha=0.7)
-            axs[7].fill_between(
-                pred_t, preds,
-                where=(np.array(preds) >= 0.5),
-                color="red", alpha=0.3,
-            )
-            axs[7].set_title(f"Model Prediction Probability  ({len(preds)} predictions)")
-        else:
-            n_feat = len(state["times"])
-            msg = (
-                f"Waiting for predictions...\n({n_feat} features so far)"
-                if n_feat > 0
-                else "Waiting for valid features..."
-            )
-            axs[7].text(
-                0.5, 0.5, msg,
-                ha="center", va="center", transform=axs[7].transAxes, fontsize=10,
-            )
-            axs[7].set_title("Model Prediction Probability")
-        axs[7].set_ylabel("Probability")
-        axs[7].set_ylim(0, 1)
-        axs[7].grid(True, alpha=0.3)
-
         axs[-1].set_xlabel("Time (s)")
 
         ecg_dur = len(state["ecg_data"]) / _FS if state["ecg_data"] else 0.0
         fig.suptitle(
             f"Real-time ECG Analysis — Frame {frame_idx + 1}/{len(df)}"
             f"  |  Cumulative ECG: {ecg_dur:.1f}s"
-            f"  |  Features: {len(state['times'])}"
-            f"  |  Predictions: {len(state['predictions'])}",
+            f"  |  Features: {len(state['times'])}",
             fontsize=12,
         )
         plt.tight_layout()

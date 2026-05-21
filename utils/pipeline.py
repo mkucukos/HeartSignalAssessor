@@ -2,26 +2,22 @@ import numpy as np
 import pandas as pd
 import neurokit2 as nk
 from scipy.signal import butter, filtfilt
-from sklearn.preprocessing import StandardScaler
 
 from .ecg_features import get_ecg_features
 from .noise import get_noise_std
 
 
 def generate_ecg_data(
-    model,
     fs: int = 250,
     num_frames: int = 200,
     window_size: int = 30,
     plot_tail: int = 10,
     duration_per_frame: int = 15,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Simulate ECG frames, extract features, and compute rolling ML predictions.
+) -> pd.DataFrame:
+    """Simulate ECG frames and extract signal features.
 
     Parameters
     ----------
-    model : callable
-        Pre-loaded TensorFlow SavedModel.
     fs : int
         Sampling frequency in Hz.
     num_frames : int
@@ -37,8 +33,6 @@ def generate_ecg_data(
     -------
     df : pd.DataFrame
         One row per frame containing raw signal slices, features, and metadata.
-    valid_features : pd.DataFrame
-        Subset of df where features_valid is True, with an added 'prediction' column.
     """
     print("Generating cumulative ECG data...")
 
@@ -140,36 +134,4 @@ def generate_ecg_data(
             "features_valid":      features_valid,
         })
 
-    df = pd.DataFrame(all_rows)
-
-    # --- Rolling-normalized ML predictions on valid frames only ---
-    valid_features = df[df["features_valid"]].copy()
-
-    if len(valid_features) > 0:
-        hr_means = valid_features["hr_mean"].tolist()
-        hr_maxs  = valid_features["hr_max"].tolist()
-        hr_mins  = valid_features["hr_min"].tolist()
-        hrvs     = valid_features["hrv"].tolist()
-
-        predictions: list[float] = []
-        for i in range(len(hr_means)):
-            data = np.column_stack([
-                hr_means[: i + 1], hr_maxs[: i + 1],
-                hr_mins[: i + 1], hrvs[: i + 1],
-            ])
-            feat_vec = StandardScaler().fit_transform(data)[-1].reshape(1, -1)
-            raw_pred = model(feat_vec)
-
-            if hasattr(raw_pred, "numpy"):
-                pred_val = float(raw_pred.numpy()[0][0])
-            elif isinstance(raw_pred, dict):
-                pred_val = float(next(iter(raw_pred.values()))[0][0])
-            else:
-                pred_val = float(raw_pred[0][0])
-
-            predictions.append(pred_val)
-
-        valid_features = valid_features.copy()
-        valid_features["prediction"] = predictions
-
-    return df, valid_features
+    return pd.DataFrame(all_rows)
