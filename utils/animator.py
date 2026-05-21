@@ -113,7 +113,7 @@ def create_animation(
         # Panels 2-7 — feature time series
         if state["times"]:
             t = state["times"]
-            _plot_series(axs[2], t, state["snr"],            "purple",     "SNR (dB)",  "Signal-to-Noise Ratio (SNR)",  ylim=(0, 15))
+            _plot_series(axs[2], t, state["snr"],            "purple",     "SNR (dB)",  "Signal-to-Noise Ratio (SNR)",  ylim=(0, 18))
             _plot_series(axs[3], t, state["hr_mean"],        "blue",       "HR (BPM)", "Mean Heart Rate",               hline=70)
             _plot_series(axs[4], t, state["hr_max"],         "red",        "HR (BPM)", "Maximum Heart Rate")
             _plot_series(axs[5], t, state["hr_min"],         "green",      "HR (BPM)", "Minimum Heart Rate")

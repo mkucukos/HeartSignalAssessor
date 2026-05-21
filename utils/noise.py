@@ -6,18 +6,22 @@ FLATLINE_WINDOWS = [(100, 120), (200, 220)]
 def get_noise_std(frame_count):
     """Return the target noise STD for a given simulation frame."""
     schedule = [
-        (10,  0.01),   # clean
-        (25,  0.05),   # low noise
-        (40,  0.15),   # moderate
-        (60,  0.30),   # high
-        (80,  0.50),   # extreme  → flatline 1 at frame 100
-        (140, 1.00),   # post-flatline-1 escalation
-        (160, 1.25),
-        (180, 1.50),
-        (200, 2.00),   # peak     → flatline 2 at frame 200
-        (240, 1.50),   # recovery
-        (260, 1.00),
-        (280, 0.50),
+        (20,  0.01),   # clean
+        (35,  0.03),
+        (50,  0.07),
+        (65,  0.12),
+        (80,  0.20),
+        (95,  0.35),   # → flatline 1 at frame 100
+        (130, 0.50),   # post-flatline-1
+        (145, 0.70),
+        (160, 0.90),
+        (175, 1.20),
+        (190, 1.60),
+        (200, 2.00),   # peak → flatline 2 at frame 200
+        (230, 1.60),   # recovery
+        (250, 1.10),
+        (265, 0.70),
+        (280, 0.30),
         (300, 0.10),
     ]
     for threshold, std in schedule:
