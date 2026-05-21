@@ -8,11 +8,11 @@ from .noise import get_noise_std, is_flatline_period
 
 
 def generate_ecg_data(
-    fs: int = 250,
-    num_frames: int = 750,
+    fs: int = 128,
+    num_frames: int = 500,
     window_size: int = 30,
     plot_tail: int = 10,
-    duration_per_frame: int = 15,
+    duration_per_frame: int = 10,
 ) -> pd.DataFrame:
     """Simulate ECG frames and extract signal features.
 
@@ -54,6 +54,7 @@ def generate_ecg_data(
         ))
 
         n_samples = duration_per_frame * fs
+        base_noise_std = 0.0
 
         if is_flatline_period(frame_idx):
             # Flatline: constant zero signal with sub-threshold noise (triggers flatline_ratio = 1.0)
@@ -106,7 +107,10 @@ def generate_ecg_data(
             t_win   = np.array(cumulative_time[-min_samples:])
             t_win   = t_win - t_win[0]
             features = get_ecg_features(ecg_win, t_win, fs)
-            features_valid = bool(np.all(np.isfinite(features[:5])))
+            features_valid = (
+                bool(np.all(np.isfinite(features[:5])))
+                or is_flatline_period(frame_idx)
+            )
 
         # --- 10-second plot tail (zero-referenced time axis) ---
         tail_samples = plot_tail * fs

@@ -6,7 +6,7 @@ import matplotlib.animation as animation
 from matplotlib.axes import Axes
 
 
-_FS = 250  # samples per second — mirrors the pipeline default
+_FS = 128  # samples per second — mirrors the pipeline default
 
 
 def create_animation(
@@ -63,8 +63,8 @@ def create_animation(
             axs[0].set_title(f"ECG Signal — Frame {row['frame']}  |  Buffer filling...")
         _style(axs[0], ylabel="Amplitude (mV)")
 
-        # Accumulate state for valid frames
-        if row["features_valid"] and not pd.isna(row["hr_mean"]):
+        # Accumulate state for valid frames (flatline frames: SNR=0 is plotted, HR/HRV are NaN gaps)
+        if row["features_valid"]:
             for key in ("hr_mean", "hr_max", "hr_min", "hrv", "snr", "flatline_ratio"):
                 state[key].append(row[key])
             state["frames"].append(row["frame"])

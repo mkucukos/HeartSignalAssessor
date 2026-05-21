@@ -1,32 +1,30 @@
-FLATLINE_START = 600
-FLATLINE_END   = 700
+FLATLINE_START = 470
+FLATLINE_END   = 500
 
 
 def get_noise_std(frame_count):
     """Return the target noise STD for a given simulation frame."""
     schedule = [
-        (20,  0.01),
-        (50,  0.05),
-        (75,  0.15),
-        (100, 0.30),
-        (125, 0.45),
-        (150, 0.60),
-        (175, 0.80),
+        (15,  0.01),
+        (35,  0.05),
+        (55,  0.15),
+        (80,  0.30),
+        (100, 0.45),
+        (130, 0.60),
+        (160, 0.80),
         (200, 1.00),
-        (450, 1.25),
-        (500, 1.50),
-        (550, 1.75),
-        (600, 2.00),
-        (650, 1.80),
-        (700, 1.60),
-        (750, 1.40),
-        (800, 1.20),
-        (850, 1.00),
+        (280, 1.25),
+        (330, 1.50),
+        (370, 1.75),
+        (410, 2.00),
+        (430, 1.80),
+        (450, 1.60),
+        (470, 1.40),
     ]
     for threshold, std in schedule:
         if frame_count < threshold:
             return std
-    return 1.00
+    return 1.40
 
 
 def is_flatline_period(frame_count: int) -> bool:
