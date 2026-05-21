@@ -4,13 +4,12 @@ import neurokit2 as nk
 from scipy.signal import butter, filtfilt
 
 from .ecg_features import get_ecg_features
-from .noise import get_noise_std
-from .signal_quality import flatline_ratio, baseline_wander_ratio
+from .noise import get_noise_std, is_flatline_period
 
 
 def generate_ecg_data(
     fs: int = 250,
-    num_frames: int = 200,
+    num_frames: int = 750,
     window_size: int = 30,
     plot_tail: int = 10,
     duration_per_frame: int = 15,
@@ -54,35 +53,42 @@ def generate_ecg_data(
             55, 95,
         ))
 
-        np.random.seed(frame_idx * 42 + 789)
-        ecg_segment = nk.ecg_simulate(
-            duration_per_frame, sampling_rate=fs, heart_rate=current_hr
-        )
-        np.random.seed(None)
+        n_samples = duration_per_frame * fs
 
-        # --- Multi-component progressive noise ---
-        base_noise_std = get_noise_std(frame_idx)
-        actual_noise_std = base_noise_std * np.random.uniform(0.8, 1.2)
-
-        gaussian_noise = np.random.normal(0, actual_noise_std, len(ecg_segment))
-
-        if actual_noise_std > 0.1:
-            hf_factor = min(0.3, (actual_noise_std - 0.1) * 0.5)
-            hf_raw = hf_factor * np.random.normal(0, 1, len(ecg_segment))
-            b_hf, a_hf = butter(4, 30, "highpass", fs=fs)
-            hf_noise: np.ndarray | float = filtfilt(b_hf, a_hf, hf_raw)
+        if is_flatline_period(frame_idx):
+            # Flatline: constant zero signal with sub-threshold noise (triggers flatline_ratio = 1.0)
+            ecg_noisy = np.random.normal(0, 1e-8, n_samples)
+            actual_noise_std = 0.0
         else:
-            hf_noise = 0.0
-
-        if actual_noise_std > 0.2:
-            lf_factor = min(0.2, (actual_noise_std - 0.2) * 0.3)
-            lf_drift: np.ndarray | float = lf_factor * np.sin(
-                2 * np.pi * 0.5 * np.arange(len(ecg_segment)) / fs
+            np.random.seed(frame_idx * 42 + 789)
+            ecg_segment = nk.ecg_simulate(
+                duration_per_frame, sampling_rate=fs, heart_rate=current_hr
             )
-        else:
-            lf_drift = 0.0
+            np.random.seed(None)
 
-        ecg_noisy = ecg_segment + gaussian_noise + hf_noise + lf_drift
+            # --- Multi-component progressive noise ---
+            base_noise_std = get_noise_std(frame_idx)
+            actual_noise_std = base_noise_std * np.random.uniform(0.8, 1.2)
+
+            gaussian_noise = np.random.normal(0, actual_noise_std, len(ecg_segment))
+
+            if actual_noise_std > 0.1:
+                hf_factor = min(0.3, (actual_noise_std - 0.1) * 0.5)
+                hf_raw = hf_factor * np.random.normal(0, 1, len(ecg_segment))
+                b_hf, a_hf = butter(4, 30, "highpass", fs=fs)
+                hf_noise: np.ndarray | float = filtfilt(b_hf, a_hf, hf_raw)
+            else:
+                hf_noise = 0.0
+
+            if actual_noise_std > 0.2:
+                lf_factor = min(0.2, (actual_noise_std - 0.2) * 0.3)
+                lf_drift: np.ndarray | float = lf_factor * np.sin(
+                    2 * np.pi * 0.5 * np.arange(len(ecg_segment)) / fs
+                )
+            else:
+                lf_drift = 0.0
+
+            ecg_noisy = ecg_segment + gaussian_noise + hf_noise + lf_drift
 
         # --- Append to cumulative signal ---
         t_start = len(cumulative_ecg) / fs
@@ -93,21 +99,14 @@ def generate_ecg_data(
         # --- Feature extraction over 30-second sliding window ---
         min_samples = window_size * fs
         features_valid = False
-        features = np.full(5, np.nan)
-        flatline = np.nan
-        baseline_wander = np.nan
+        features = np.full(7, np.nan)
 
         if len(cumulative_ecg) >= min_samples:
             ecg_win = np.array(cumulative_ecg[-min_samples:])
-            t_win = np.array(cumulative_time[-min_samples:])
-            t_win = t_win - t_win[0]
-            try:
-                features = get_ecg_features(ecg_win, t_win, fs)
-                features_valid = bool(np.all(np.isfinite(features)))
-            except Exception:
-                pass
-            flatline        = flatline_ratio(ecg_win)
-            baseline_wander = baseline_wander_ratio(ecg_win, fs)
+            t_win   = np.array(cumulative_time[-min_samples:])
+            t_win   = t_win - t_win[0]
+            features = get_ecg_features(ecg_win, t_win, fs)
+            features_valid = bool(np.all(np.isfinite(features[:5])))
 
         # --- 10-second plot tail (zero-referenced time axis) ---
         tail_samples = plot_tail * fs
@@ -136,8 +135,9 @@ def generate_ecg_data(
             "hr_min":              features[2],
             "hrv":                 features[3],
             "snr":                 features[4],
-            "flatline_ratio":      flatline,
-            "baseline_wander":     baseline_wander,
+            "flatline_ratio":      features[5],
+            "baseline_wander":     features[6],
+            "is_flatline_period":  is_flatline_period(frame_idx),
             "features_valid":      features_valid,
         })
 

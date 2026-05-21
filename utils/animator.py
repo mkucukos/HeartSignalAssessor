@@ -47,11 +47,18 @@ def create_animation(
         ecg_plot = row["ecg_plot"]
 
         # Panel 0 — current ECG window (10-second tail)
+        is_flat = row.get("is_flatline_period", False)
         if ecg_plot is not None and len(ecg_plot) > 0:
             axs[0].plot(row["time_plot"], ecg_plot, "k-", linewidth=0.8)
-            axs[0].set_title(
-                f"Current ECG Window — Frame {row['frame']}  |  Noise STD: {row['noise_std']:.3f}"
-            )
+            if is_flat:
+                axs[0].set_facecolor("#ffe5e5")
+                axs[0].set_title(
+                    f"Current ECG Window — Frame {row['frame']}  |  ⚠ FLATLINE PERIOD",
+                )
+            else:
+                axs[0].set_title(
+                    f"Current ECG Window — Frame {row['frame']}  |  Noise STD: {row['noise_std']:.3f}"
+                )
         else:
             axs[0].set_title(f"ECG Signal — Frame {row['frame']}  |  Buffer filling...")
         _style(axs[0], ylabel="Amplitude (mV)")

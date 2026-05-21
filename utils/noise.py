@@ -1,3 +1,7 @@
+FLATLINE_START = 600
+FLATLINE_END   = 700
+
+
 def get_noise_std(frame_count):
     """Return the target noise STD for a given simulation frame."""
     schedule = [
@@ -23,3 +27,8 @@ def get_noise_std(frame_count):
         if frame_count < threshold:
             return std
     return 1.00
+
+
+def is_flatline_period(frame_count: int) -> bool:
+    """Return True if this frame falls inside the simulated flatline window."""
+    return FLATLINE_START <= frame_count < FLATLINE_END
